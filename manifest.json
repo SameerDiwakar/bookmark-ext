@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YouTube Timeline Bookmark & Transcript Search",
   "version": "1.0.0",
-  "description": "Add timeline bookmarks, A/B looping, and in-video transcript text search to YouTube.",
+  "description": "Add timeline bookmarks, color-coded tags, and in-video transcript text search to YouTube.",
   "permissions": ["storage"],
   "host_permissions": ["https://www.youtube.com/*"],
   "icons": {

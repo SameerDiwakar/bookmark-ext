@@ -1,6 +1,6 @@
 # YouTube Timeline Bookmark & Transcript Search
 
-A modern Chrome Extension (Manifest V3) designed for video note-taking, study loops, and real-time transcript searching on YouTube. Bookmark key moments with 1-click, color-code progress bar tick marks, loop A/B playback ranges, and export timestamped notes to Markdown.
+A modern Chrome Extension (Manifest V3) designed for video note-taking, study navigation, and real-time transcript searching on YouTube. Bookmark key moments with 1-click, color-code progress bar tick marks, and export timestamped notes to Markdown.
 
 ---
 
@@ -64,23 +64,18 @@ Organize your video notes by topic or priority using 4 distinct color tags:
 
 ---
 
-### 5. A/B Repeat Playback Looping
-Loop video playback continuously between two specific timestamps:
-1. Open the **🔖 Bookmarks** tab in the side panel.
-2. Under **🔁 A/B Repeat Loop**:
-   - Click **`Point A`** (or click **`A`** on any saved bookmark row) to set the start time.
-   - Seek forward and click **`Point B`** (or click **`B`** on any saved bookmark row) to set the end time.
-3. Click the **`Off`** toggle button so it changes to **`LOOP ON`** (glowing red).
-4. Play the video: when playback reaches Point B, it automatically jumps back to Point A smoothly!
-5. **Progress Bar Overlay**: A translucent range highlight bar (`.ytb-loop-overlay`) appears on YouTube's player progress bar marking your active loop region.
-6. Click **`Clear`** to reset loop points.
+### 5. In-Panel Features & User Guide Tab (📖 Guide)
+Access built-in help and instructions directly within the extension:
+1. Open the side panel and click the **`📖 Guide`** tab.
+2. View quick instructions for 1-click bookmarking, auto-focus renaming, color tags, transcript search, undo notifications, and keyboard shortcuts without leaving YouTube!
 
 ---
 
 ### 6. Deleting Bookmarks & Floating Undo Toast
 - **Deleting a Single Bookmark**: Click the **`🗑`** button next to any bookmark row.
-- **Floating Undo Toast**: When a bookmark is deleted, a floating notification appears at the bottom center of the screen (*"Bookmark @ 01:25 deleted — [Undo]"*). Click **Undo** to restore it instantly!
+- **Floating Undo Toast**: When a bookmark is deleted, a floating notification appears at the bottom center of the screen (*"Bookmark @ 01:25 deleted — [Undo]"*). Click **Undo** within 5 seconds to restore it instantly!
 - **Bulk Clear All**: Click **`Clear All`** in the Bookmarks toolbar to wipe all bookmarks for the current video. A confirmation prompt prevents accidental clears, and the Undo Toast allows restoring the entire list if needed.
+
 
 ---
 
