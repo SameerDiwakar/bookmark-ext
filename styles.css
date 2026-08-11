@@ -1,0 +1,244 @@
+/* styles.css — YouTube Timeline Bookmarks & Transcript Search
+   Native YouTube dark-theme aesthetic. */
+
+/* ---- Bookmark button in player controls ---- */
+.ytb-bookmark-btn.ytp-button {
+  font-size: 16px;
+  line-height: 1;
+  opacity: 0.9;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.ytb-bookmark-btn.ytp-button:hover {
+  opacity: 1;
+  transform: scale(1.12);
+}
+
+/* ---- Progress bar tick marks ---- */
+.ytp-progress-bar { position: relative; }
+.ytb-tick-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+.ytb-tick {
+  position: absolute;
+  top: 50%;
+  width: 4px;
+  height: 14px;
+  margin-left: -2px;
+  margin-top: -7px;
+  background: #ff4e45;
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(255, 78, 69, 0.8);
+  cursor: pointer;
+  pointer-events: auto;
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+.ytb-tick:hover {
+  transform: scale(1.6);
+  background: #ff8a82;
+}
+
+/* ---- Floating tooltip ---- */
+.ytb-tick-tooltip {
+  position: fixed;
+  z-index: 99999;
+  background: rgba(15, 15, 15, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-family: "YouTube Sans", Roboto, Arial, sans-serif;
+  font-size: 12px;
+  color: #f1f1f1;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  max-width: 260px;
+}
+.ytb-tt-time { font-weight: 600; color: #ff4e45; }
+.ytb-tt-label { color: #e1e1e1; margin-top: 2px; word-wrap: break-word; }
+
+/* ---- Seek flash ---- */
+video.ytb-seek-flash { outline: 2px solid rgba(255, 78, 69, 0.6); outline-offset: -2px; }
+
+/* ---- Side panel ---- */
+.ytb-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 360px;
+  height: 100vh;
+  background: rgba(15, 15, 15, 0.96);
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  color: #f1f1f1;
+  font-family: Roboto, Arial, sans-serif;
+  font-size: 13px;
+  z-index: 90000;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(8px);
+}
+.ytb-panel.open { transform: translateX(0); }
+
+.ytb-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ytb-title { font-weight: 600; font-size: 14px; }
+.ytb-close {
+  background: transparent;
+  border: none;
+  color: #aaa;
+  font-size: 20px;
+  cursor: pointer;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.ytb-close:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+
+.ytb-tabs {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ytb-tab {
+  flex: 1;
+  padding: 10px;
+  background: transparent;
+  border: none;
+  color: #aaa;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 2px solid transparent;
+  transition: color 0.15s, border-color 0.15s;
+}
+.ytb-tab:hover { color: #fff; }
+.ytb-tab.active { color: #fff; border-bottom-color: #ff4e45; }
+
+.ytb-tab-panel { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 10px; }
+
+/* ---- Search ---- */
+.ytb-search {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 9px 11px;
+  background: #1f1f1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #f1f1f1;
+  font-size: 13px;
+  outline: none;
+}
+.ytb-search:focus { border-color: #ff4e45; }
+.ytb-search-status {
+  font-size: 11px;
+  color: #999;
+  margin: 8px 2px 6px;
+}
+.ytb-search-status.empty { color: #ff8a82; }
+.ytb-search-status.loading { color: #8ab4ff; }
+
+.ytb-search-results {
+  flex: 1;
+  overflow-y: auto;
+  margin-top: 4px;
+}
+.ytb-result {
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  line-height: 1.45;
+  transition: background 0.12s;
+}
+.ytb-result:hover { background: rgba(255, 255, 255, 0.06); }
+.ytb-result-time { color: #8ab4ff; font-weight: 600; margin-right: 4px; }
+.ytb-result-text { color: #e1e1e1; }
+.ytb-mark { background: rgba(255, 215, 0, 0.3); color: #fff; border-radius: 2px; padding: 0 1px; }
+.ytb-more { padding: 10px; text-align: center; color: #777; font-size: 11px; }
+
+/* ---- Bookmarks tab ---- */
+.ytb-bm-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ytb-bm-toolbar button {
+  flex: 1;
+  padding: 8px;
+  background: #1f1f1f;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #f1f1f1;
+  cursor: pointer;
+  font-size: 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ytb-bm-toolbar button:hover { background: #2a2a2a; border-color: #ff4e45; }
+
+.ytb-bm-list { flex: 1; overflow-y: auto; }
+.ytb-empty { color: #888; padding: 16px 6px; text-align: center; line-height: 1.6; }
+
+.ytb-bm-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ytb-bm-time {
+  color: #ff4e45;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  min-width: 52px;
+}
+.ytb-bm-label {
+  flex: 1;
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #f1f1f1;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+}
+.ytb-bm-label:focus { border-color: #ff4e45; }
+.ytb-bm-actions { display: flex; gap: 4px; }
+.ytb-bm-actions button {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ddd;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ytb-bm-actions button:hover { background: rgba(255, 255, 255, 0.08); border-color: #ff4e45; }
+.ytb-bm-del:hover { border-color: #ff4e45; color: #ff8a82; }
+
+/* ---- Responsive ---- */
+@media (max-width: 640px) {
+  .ytb-panel { width: 100vw; }
+}
+
+/* ---- Scrollbar ---- */
+.ytb-search-results::-webkit-scrollbar,
+.ytb-bm-list::-webkit-scrollbar { width: 8px; }
+.ytb-search-results::-webkit-scrollbar-thumb,
+.ytb-bm-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 4px;
+}
+.ytb-search-results::-webkit-scrollbar-track,
+.ytb-bm-list::-webkit-scrollbar-track { background: transparent; }

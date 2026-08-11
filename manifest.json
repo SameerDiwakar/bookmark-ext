@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Timeline Bookmark & Transcript Search",
+  "version": "1.0.0",
+  "description": "Add timeline bookmarks, A/B looping, and in-video transcript text search to YouTube.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.youtube.com/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/watch*", "https://www.youtube.com/watch?v=*"],
+      "js": ["transcriptFetcher.js", "content.js"],
+      "css": ["styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "commands": {
+    "toggle-panel": {
+      "suggested_key": { "default": "Ctrl+Shift+Y", "mac": "Command+Shift+Y" },
+      "description": "Toggle the Bookmarks & Search panel"
+    }
+  }
+}
