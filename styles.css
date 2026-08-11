@@ -13,7 +13,7 @@
   transform: scale(1.12);
 }
 
-/* ---- Progress bar tick marks ---- */
+/* ---- Progress bar tick marks & Loop Overlay ---- */
 .ytp-progress-bar { position: relative; }
 .ytb-tick-layer {
   position: absolute;
@@ -38,6 +38,24 @@
 .ytb-tick:hover {
   transform: scale(1.6);
   background: #ff8a82;
+}
+
+.ytb-loop-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(138, 180, 255, 0.35);
+  border-left: 2px solid #8ab4ff;
+  border-right: 2px solid #8ab4ff;
+  pointer-events: none;
+  z-index: 35;
+  box-sizing: border-box;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.ytb-loop-overlay.active {
+  background: rgba(255, 78, 69, 0.4);
+  border-color: #ff4e45;
+  box-shadow: 0 0 8px rgba(255, 78, 69, 0.6);
 }
 
 /* ---- Floating tooltip ---- */
@@ -124,6 +142,68 @@ video.ytb-seek-flash { outline: 2px solid rgba(255, 78, 69, 0.6); outline-offset
 
 .ytb-tab-panel { flex: 1; overflow: hidden; display: flex; flex-direction: column; padding: 10px; }
 
+/* ---- A/B Loop Box ---- */
+.ytb-loop-box {
+  background: #181818;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+.ytb-loop-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 12px;
+  color: #8ab4ff;
+  margin-bottom: 8px;
+}
+.ytb-loop-toggle-btn {
+  background: #282828;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #aaa;
+  border-radius: 12px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.ytb-loop-toggle-btn.active {
+  background: #ff4e45;
+  color: #fff;
+  border-color: #ff4e45;
+  box-shadow: 0 0 8px rgba(255, 78, 69, 0.5);
+}
+.ytb-loop-toggle-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ytb-loop-controls {
+  display: flex;
+  gap: 6px;
+}
+.ytb-loop-controls button {
+  flex: 1;
+  padding: 6px 4px;
+  background: #242424;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #ddd;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  transition: background 0.15s, border-color 0.15s;
+}
+.ytb-loop-controls button:hover {
+  background: #303030;
+  border-color: #8ab4ff;
+}
+
 /* ---- Search ---- */
 .ytb-search {
   width: 100%;
@@ -188,7 +268,7 @@ video.ytb-seek-flash { outline: 2px solid rgba(255, 78, 69, 0.6); outline-offset
 .ytb-bm-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   padding: 8px 6px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
@@ -196,7 +276,7 @@ video.ytb-seek-flash { outline: 2px solid rgba(255, 78, 69, 0.6); outline-offset
   color: #ff4e45;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
-  min-width: 52px;
+  min-width: 48px;
 }
 .ytb-bm-label {
   flex: 1;
@@ -209,22 +289,23 @@ video.ytb-seek-flash { outline: 2px solid rgba(255, 78, 69, 0.6); outline-offset
   outline: none;
 }
 .ytb-bm-label:focus { border-color: #ff4e45; }
-.ytb-bm-actions { display: flex; gap: 4px; }
+.ytb-bm-actions { display: flex; gap: 3px; }
 .ytb-bm-actions button {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #ddd;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 11px;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: background 0.15s, border-color 0.15s;
 }
 .ytb-bm-actions button:hover { background: rgba(255, 255, 255, 0.08); border-color: #ff4e45; }
+.ytb-bm-set-a:hover, .ytb-bm-set-b:hover { border-color: #8ab4ff; color: #8ab4ff; }
 .ytb-bm-del:hover { border-color: #ff4e45; color: #ff8a82; }
 
 /* ---- Responsive ---- */
@@ -242,3 +323,4 @@ video.ytb-seek-flash { outline: 2px solid rgba(255, 78, 69, 0.6); outline-offset
 }
 .ytb-search-results::-webkit-scrollbar-track,
 .ytb-bm-list::-webkit-scrollbar-track { background: transparent; }
+

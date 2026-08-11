@@ -1,6 +1,6 @@
 // content.js
-// YouTube Timeline Bookmarks + Transcript Search (Manifest V3, vanilla JS).
-// Runs at document_idle on https://www.youtube.com/watch?v=*.
+// YouTube Timeline Bookmarks + Transcript Search + A/B Looping (Manifest V3, vanilla JS).
+// Runs on https://www.youtube.com/*.
 
 (function () {
   'use strict';
@@ -15,7 +15,13 @@
   let panel = null;
   let bookmarkBtn = null;
   let tickLayer = null;
+  let loopOverlayEl = null;
   let tooltipEl = null;
+
+  // A/B Loop state
+  let loopA = null;
+  let loopB = null;
+  let loopActive = false;
 
   const STORAGE_KEY = 'ytb_bookmarks'; // { [videoId]: [{ time, label }] }
 
@@ -35,7 +41,7 @@
   function getVideoIdFromURL() {
     try {
       const u = new URL(location.href);
-      if (u.hostname === 'www.youtube.com' && u.pathname === '/watch') {
+      if (u.hostname.includes('youtube.com') && u.pathname === '/watch') {
         return u.searchParams.get('v') || null;
       }
     } catch (e) {}
@@ -43,7 +49,9 @@
   }
 
   function getVideoEl() {
-    return document.querySelector('video.video-stream') || document.querySelector('video');
+    return document.querySelector('video.html5-main-video') ||
+           document.querySelector('video.video-stream') ||
+           document.querySelector('video');
   }
 
   // ---- Storage -----------------------------------------------------------
@@ -106,6 +114,54 @@
     setTimeout(() => video.classList.remove('ytb-seek-flash'), 400);
   }
 
+  // ---- A/B Loop Logic ---------------------------------------------------
+  function setLoopPointA(t) {
+    const val = (t != null && !isNaN(t)) ? Math.round(t * 10) / 10 : (video ? Math.round(video.currentTime * 10) / 10 : null);
+    if (val == null) return;
+    loopA = val;
+    if (loopB !== null && loopA >= loopB) {
+      loopB = null; // reset end if point A is after point B
+    }
+    renderLoopUI();
+    renderLoopOverlay();
+  }
+
+  function setLoopPointB(t) {
+    const val = (t != null && !isNaN(t)) ? Math.round(t * 10) / 10 : (video ? Math.round(video.currentTime * 10) / 10 : null);
+    if (val == null) return;
+    if (loopA !== null && val <= loopA) return; // point B must be after A
+    loopB = val;
+    renderLoopUI();
+    renderLoopOverlay();
+  }
+
+  function clearLoop() {
+    loopA = null;
+    loopB = null;
+    loopActive = false;
+    renderLoopUI();
+    renderLoopOverlay();
+  }
+
+  function toggleLoopActive() {
+    if (loopA == null || loopB == null) return;
+    loopActive = !loopActive;
+    if (loopActive && video) {
+      if (video.currentTime < loopA || video.currentTime >= loopB) {
+        video.currentTime = loopA;
+      }
+    }
+    renderLoopUI();
+    renderLoopOverlay();
+  }
+
+  function onVideoTimeUpdate() {
+    if (!loopActive || !video || loopA == null || loopB == null || loopB <= loopA) return;
+    if (video.currentTime >= loopB || video.currentTime < loopA - 0.5) {
+      video.currentTime = loopA;
+    }
+  }
+
   // ---- Player controls: bookmark button ---------------------------------
   function ensureBookmarkButton() {
     if (!video) return;
@@ -115,8 +171,8 @@
 
     bookmarkBtn = document.createElement('button');
     bookmarkBtn.className = 'ytp-button ytb-bookmark-btn';
-    bookmarkBtn.title = 'Bookmark this moment (B)';
-    bookmarkBtn.setAttribute('aria-label', 'Bookmark this moment');
+    bookmarkBtn.title = 'Bookmark current time (B)';
+    bookmarkBtn.setAttribute('aria-label', 'Bookmark current time');
     bookmarkBtn.textContent = '🔖';
 
     controls.insertBefore(bookmarkBtn, controls.firstChild);
@@ -127,22 +183,30 @@
     });
   }
 
-  // ---- Progress bar tick marks ------------------------------------------
-  function ensureTickLayer() {
+  // ---- Progress bar tick marks & Loop overlay ---------------------------
+  function ensureProgressBarElements() {
     if (!video) return;
     const bar = $('.ytp-progress-bar');
     if (!bar) return;
-    if (tickLayer && document.contains(tickLayer)) return;
 
-    tickLayer = document.createElement('div');
-    tickLayer.className = 'ytb-tick-layer';
-    bar.appendChild(tickLayer);
+    if (!tickLayer || !document.contains(tickLayer)) {
+      tickLayer = document.createElement('div');
+      tickLayer.className = 'ytb-tick-layer';
+      bar.appendChild(tickLayer);
+    }
 
-    // Tooltip
-    tooltipEl = document.createElement('div');
-    tooltipEl.className = 'ytb-tick-tooltip';
-    tooltipEl.style.display = 'none';
-    document.body.appendChild(tooltipEl);
+    if (!loopOverlayEl || !document.contains(loopOverlayEl)) {
+      loopOverlayEl = document.createElement('div');
+      loopOverlayEl.className = 'ytb-loop-overlay';
+      bar.appendChild(loopOverlayEl);
+    }
+
+    if (!tooltipEl || !document.contains(tooltipEl)) {
+      tooltipEl = document.createElement('div');
+      tooltipEl.className = 'ytb-tick-tooltip';
+      tooltipEl.style.display = 'none';
+      document.body.appendChild(tooltipEl);
+    }
   }
 
   function renderTicks() {
@@ -169,6 +233,24 @@
 
       tickLayer.appendChild(tick);
     });
+  }
+
+  function renderLoopOverlay() {
+    if (!loopOverlayEl) return;
+    const dur = video && isFinite(video.duration) ? video.duration : 0;
+    if (!dur || loopA == null || loopB == null || loopB <= loopA) {
+      loopOverlayEl.style.display = 'none';
+      return;
+    }
+
+    const startPct = Math.max(0, Math.min(100, (loopA / dur) * 100));
+    const endPct = Math.max(0, Math.min(100, (loopB / dur) * 100));
+    const widthPct = endPct - startPct;
+
+    loopOverlayEl.style.display = 'block';
+    loopOverlayEl.style.left = `${startPct}%`;
+    loopOverlayEl.style.width = `${widthPct}%`;
+    loopOverlayEl.classList.toggle('active', loopActive);
   }
 
   function showTooltip(e, bm) {
@@ -233,6 +315,17 @@
         <div class="ytb-search-results"></div>
       </div>
       <div class="ytb-tab-panel" data-panel="bookmarks" style="display:none">
+        <div class="ytb-loop-box">
+          <div class="ytb-loop-head">
+            <span>🔁 A/B Repeat Loop</span>
+            <button class="ytb-loop-toggle-btn" title="Toggle Loop Active">Off</button>
+          </div>
+          <div class="ytb-loop-controls">
+            <button class="ytb-loop-btn-a" title="Set start loop point">Set A (${loopA != null ? fmtTime(loopA) : '--:--'})</button>
+            <button class="ytb-loop-btn-b" title="Set end loop point">Set B (${loopB != null ? fmtTime(loopB) : '--:--'})</button>
+            <button class="ytb-loop-btn-clear" title="Clear A/B loop">Clear</button>
+          </div>
+        </div>
         <div class="ytb-bm-toolbar">
           <button class="ytb-add">+ Bookmark current time</button>
           <button class="ytb-export">Export to Markdown</button>
@@ -258,12 +351,20 @@
     });
     panel.querySelector('.ytb-export').addEventListener('click', exportMarkdown);
 
+    // Loop UI listeners
+    panel.querySelector('.ytb-loop-btn-a').addEventListener('click', () => setLoopPointA());
+    panel.querySelector('.ytb-loop-btn-b').addEventListener('click', () => setLoopPointB());
+    panel.querySelector('.ytb-loop-btn-clear').addEventListener('click', clearLoop);
+    panel.querySelector('.ytb-loop-toggle-btn').addEventListener('click', toggleLoopActive);
+
     const searchInput = panel.querySelector('.ytb-search');
     let searchTimer = null;
     searchInput.addEventListener('input', () => {
       clearTimeout(searchTimer);
       searchTimer = setTimeout(() => renderSearchResults(searchInput.value), 80);
     });
+
+    renderLoopUI();
   }
 
   function setPanelOpen(open) {
@@ -273,6 +374,22 @@
   }
 
   function togglePanel() { setPanelOpen(!panelOpen); }
+
+  function renderLoopUI() {
+    if (!panel) return;
+    const btnA = panel.querySelector('.ytb-loop-btn-a');
+    const btnB = panel.querySelector('.ytb-loop-btn-b');
+    const toggleBtn = panel.querySelector('.ytb-loop-toggle-btn');
+    if (!btnA || !btnB || !toggleBtn) return;
+
+    btnA.textContent = `Point A (${loopA != null ? fmtTime(loopA) : '--:--'})`;
+    btnB.textContent = `Point B (${loopB != null ? fmtTime(loopB) : '--:--'})`;
+
+    const canLoop = loopA != null && loopB != null && loopB > loopA;
+    toggleBtn.disabled = !canLoop;
+    toggleBtn.textContent = loopActive ? 'LOOP ON' : 'Loop Off';
+    toggleBtn.classList.toggle('active', loopActive);
+  }
 
   // ---- Bookmark list rendering ------------------------------------------
   function renderBookmarkList() {
@@ -291,11 +408,15 @@
         <div class="ytb-bm-time">${fmtTime(bm.time)}</div>
         <input class="ytb-bm-label" type="text" value="${escapeHtml(bm.label)}" />
         <div class="ytb-bm-actions">
+          <button class="ytb-bm-set-a" title="Set as Loop A">A</button>
+          <button class="ytb-bm-set-b" title="Set as Loop B">B</button>
           <button class="ytb-bm-jump" title="Jump to">▶</button>
           <button class="ytb-bm-edit" title="Save label">✓</button>
           <button class="ytb-bm-del" title="Delete">🗑</button>
         </div>
       `;
+      row.querySelector('.ytb-bm-set-a').addEventListener('click', () => setLoopPointA(bm.time));
+      row.querySelector('.ytb-bm-set-b').addEventListener('click', () => setLoopPointB(bm.time));
       row.querySelector('.ytb-bm-jump').addEventListener('click', () => jumpTo(bm.time));
       row.querySelector('.ytb-bm-del').addEventListener('click', () => deleteBookmark(i));
       const input = row.querySelector('.ytb-bm-label');
@@ -331,7 +452,7 @@
     if (transcript || transcriptError) return;
     if (!videoId) return;
     try {
-      const data = await TranscriptFetcher.fetchTranscript(videoId);
+      const data = await window.TranscriptFetcher.fetchTranscript(videoId);
       if (data && data.length) {
         transcript = data;
       } else {
@@ -401,71 +522,76 @@
     if (isEditable) return;
 
     if (e.key === 'b' || e.key === 'B') {
-      if (video) {
+      if (video && videoId) {
         e.preventDefault();
         addBookmark(video.currentTime);
       }
     }
   }
 
-  // ---- SPA routing ------------------------------------------------------
+  // ---- SPA routing & Init ------------------------------------------------
   let routeTimer = null;
   function onRouteChange() {
     clearTimeout(routeTimer);
     routeTimer = setTimeout(initForCurrentVideo, 350);
   }
 
-  // ---- Init --------------------------------------------------------------
   function initForCurrentVideo() {
     const newVid = getVideoIdFromURL();
-    if (newVid === videoId && video && document.contains(video)) {
-      // Same video; just re-attach UI if missing.
-      ensureBookmarkButton();
-      ensureTickLayer();
-      renderTicks();
-      return;
-    }
-    videoId = newVid;
-    transcript = null;
-    transcriptError = false;
-    bookmarks = [];
 
-    if (!videoId) {
+    if (!newVid) {
+      videoId = null;
       if (panel) setPanelOpen(false);
       return;
     }
 
-    video = getVideoEl();
-    if (!video) {
-      // Video element not ready yet; retry shortly.
-      setTimeout(initForCurrentVideo, 500);
+    const newVideoEl = getVideoEl();
+    if (!newVideoEl) {
+      setTimeout(initForCurrentVideo, 400);
       return;
     }
+
+    if (newVid === videoId && video === newVideoEl && document.contains(video)) {
+      // Same video and element; ensure UI components are intact
+      ensureBookmarkButton();
+      ensureProgressBarElements();
+      renderTicks();
+      renderLoopOverlay();
+      return;
+    }
+
+    // Video changed or element re-created
+    if (video) {
+      video.removeEventListener('timeupdate', onVideoTimeUpdate);
+    }
+
+    videoId = newVid;
+    video = newVideoEl;
+    transcript = null;
+    transcriptError = false;
+    bookmarks = [];
+
+    // Clear A/B loop for new video
+    clearLoop();
+
+    // Attach timeupdate listener for A/B loop repeat
+    video.addEventListener('timeupdate', onVideoTimeUpdate);
 
     loadBookmarks(videoId).then((list) => {
       bookmarks = list || [];
       ensureBookmarkButton();
-      ensureTickLayer();
+      ensureProgressBarElements();
       renderTicks();
+      renderLoopOverlay();
       renderBookmarkList();
       renderSearchResults('');
       ensureTranscript();
     });
 
-    // Keep duration-based ticks accurate once metadata is known.
     if (!video.__ytbDurWired) {
       video.__ytbDurWired = true;
-      video.addEventListener('durationchange', renderTicks);
-      video.addEventListener('loadedmetadata', renderTicks);
-    }
-  }
-
-  function waitForPlayerAndInit() {
-    video = getVideoEl();
-    if (video) {
-      initForCurrentVideo();
-    } else {
-      setTimeout(waitForPlayerAndInit, 500);
+      video.addEventListener('durationchange', () => { renderTicks(); renderLoopOverlay(); });
+      video.addEventListener('loadedmetadata', () => { renderTicks(); renderLoopOverlay(); });
     }
   }
 
@@ -474,14 +600,22 @@
     document.addEventListener('keydown', onKeydown, true);
     window.addEventListener('yt-navigate-finish', onRouteChange);
     window.addEventListener('popstate', onRouteChange);
-    // Observe body for SPA swaps of the player container.
+
+    // Watch for title/url mutations for SPA changes
+    let lastUrl = location.href;
     const obs = new MutationObserver(() => {
-      if (!getVideoEl()) return;
-      ensureBookmarkButton();
-      ensureTickLayer();
+      if (location.href !== lastUrl) {
+        lastUrl = location.href;
+        onRouteChange();
+      }
+      if (getVideoIdFromURL() && getVideoEl()) {
+        ensureBookmarkButton();
+        ensureProgressBarElements();
+      }
     });
     obs.observe(document.documentElement, { childList: true, subtree: true });
 
+    // Handle background service worker message (toolbar icon click & hotkey)
     chrome.runtime.onMessage.addListener((msg) => {
       if (msg && msg.type === 'YTB_TOGGLE_PANEL') {
         ensurePanel();
@@ -489,8 +623,9 @@
       }
     });
 
-    waitForPlayerAndInit();
+    initForCurrentVideo();
   }
 
   boot();
 })();
+
