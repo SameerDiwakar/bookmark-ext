@@ -1,23 +1,18 @@
 // transcriptFetcher.js
-// Fetches a YouTube video's caption track and parses it into a flat list of
-// { start, duration, text } segments. Uses only native window.fetch against
-// youtube.com endpoints (same-origin, cookies included) so it does not trip
-// Brave Shields or ad-block CORS-proxy rules.
-//
-// Exposed as a global `TranscriptFetcher` (content scripts share an isolated
-// world, so globals are visible across listed content-script files).
+// Fetches YouTube video caption tracks (both manual & auto-generated ASR)
+// and parses them into a flat list of { start, duration, text } segments.
 
 (function () {
   'use strict';
 
   function extractPlayerResponse(html) {
+    if (!html) return null;
     const marker = 'ytInitialPlayerResponse';
     const startIdx = html.indexOf(marker);
     if (startIdx === -1) return null;
     const eq = html.indexOf('=', startIdx);
     if (eq === -1) return null;
     let i = eq + 1;
-    // skip whitespace
     while (i < html.length && /\s/.test(html[i])) i++;
     if (html[i] !== '{') return null;
     let depth = 0;
@@ -43,16 +38,53 @@
     try { return JSON.parse(slice); } catch (e) { return null; }
   }
 
+  function getDOMPlayerResponse() {
+    try {
+      // Check window property if exposed
+      if (window.ytInitialPlayerResponse && window.ytInitialPlayerResponse.captions) {
+        return window.ytInitialPlayerResponse;
+      }
+      // Scan inline script elements in active document
+      const scripts = document.querySelectorAll('script');
+      for (const s of scripts) {
+        const text = s.textContent || '';
+        if (text.includes('ytInitialPlayerResponse')) {
+          const pr = extractPlayerResponse(text);
+          if (pr && pr.captions) return pr;
+        }
+      }
+    } catch (e) {}
+    return null;
+  }
+
   function pickTrack(tracks) {
     if (!tracks || !tracks.length) return null;
-    // Prefer an English track; prefer non-ASR (manual) captions over ASR.
-    const en = tracks.filter(t => (t.languageCode || '').startsWith('en'));
-    const pool = en.length ? en : tracks;
-    const manual = pool.filter(t => !t.kind || t.kind !== 'asr');
-    return (manual.length ? manual : pool)[0];
+    
+    // 1. Manual English
+    const manualEn = tracks.filter(t => (t.languageCode || '').startsWith('en') && (!t.kind || t.kind !== 'asr'));
+    if (manualEn.length) return manualEn[0];
+
+    // 2. Auto-generated English (ASR)
+    const asrEn = tracks.filter(t => (t.languageCode || '').startsWith('en') && t.kind === 'asr');
+    if (asrEn.length) return asrEn[0];
+
+    // 3. Manual non-English
+    const manualAny = tracks.filter(t => !t.kind || t.kind !== 'asr');
+    if (manualAny.length) return manualAny[0];
+
+    // 4. Any track available (including ASR auto-generated in any language)
+    return tracks[0];
   }
 
   async function fetchCaptionTracks(videoId) {
+    // 1. Try instant DOM extraction from active YouTube player
+    const domPr = getDOMPlayerResponse();
+    if (domPr) {
+      const domTracks = (((domPr.captions || {}).playerCaptionsTracklistRenderer || {}).captionTracks) || [];
+      if (domTracks.length) return domTracks;
+    }
+
+    // 2. Fallback to watch page fetch
     const url = `https://www.youtube.com/watch?v=${videoId}&hl=en`;
     const res = await fetch(url, { credentials: 'include' });
     if (!res.ok) throw new Error(`watch page fetch failed: ${res.status}`);
@@ -80,22 +112,58 @@
     return out;
   }
 
+  function parseXmlCaptions(xmlStr) {
+    try {
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(xmlStr, 'text/xml');
+      const nodes = xml.querySelectorAll('text');
+      const out = [];
+      nodes.forEach(node => {
+        const start = parseFloat(node.getAttribute('start'));
+        const dur = parseFloat(node.getAttribute('dur') || '0');
+        let text = (node.textContent || '').replace(/\n/g, ' ').trim();
+        text = text.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+        if (!isNaN(start) && text) {
+          out.push({ start, duration: isNaN(dur) ? 0 : dur, text });
+        }
+      });
+      return out;
+    } catch (e) {
+      return [];
+    }
+  }
+
   async function fetchTranscript(videoId) {
     const tracks = await fetchCaptionTracks(videoId);
-    if (!tracks.length) return null;
+    if (!tracks || !tracks.length) return null;
+    
     const track = pickTrack(tracks);
     if (!track) return null;
+
     let baseUrl = track.baseUrl || '';
     if (!baseUrl) return null;
-    // fmt=json3 returns structured events with timings and text.
+
+    // Attach fmt=json3
     const sep = baseUrl.indexOf('?') === -1 ? '?' : '&';
     const txUrl = `${baseUrl}${sep}fmt=json3`;
+    
     const res = await fetch(txUrl, { credentials: 'include' });
     if (!res.ok) throw new Error(`timedtext fetch failed: ${res.status}`);
-    const data = await res.json();
-    const parsed = parseJson3(data);
+
+    const rawText = await res.text();
+    let parsed = [];
+
+    // Try parsing as JSON first, fallback to XML if YouTube returned srv XML
+    try {
+      const jsonData = JSON.parse(rawText);
+      parsed = parseJson3(jsonData);
+    } catch (e) {
+      parsed = parseXmlCaptions(rawText);
+    }
+
     return parsed.length ? parsed : null;
   }
 
   self.TranscriptFetcher = { fetchTranscript, fetchCaptionTracks };
 })();
+
