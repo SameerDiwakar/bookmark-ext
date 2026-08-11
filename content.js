@@ -5,10 +5,17 @@
 (function () {
   'use strict';
 
-  // ---- State -------------------------------------------------------------
+  // ---- Color map & State -------------------------------------------------
+  const COLOR_MAP = {
+    red: '#ff4e45',
+    green: '#2ba640',
+    blue: '#3ea6ff',
+    yellow: '#f1c40f'
+  };
+
   let videoId = null;
   let video = null;
-  let bookmarks = [];        // [{ time, label }]
+  let bookmarks = [];        // [{ time, label, color }]
   let transcript = null;     // [{ start, duration, text }] | null
   let transcriptError = false;
   let panelOpen = false;
@@ -18,12 +25,17 @@
   let loopOverlayEl = null;
   let tooltipEl = null;
 
+  // Undo Toast state
+  let undoState = null;      // { type: 'single'|'bulk', item?, index?, listBackup? }
+  let toastEl = null;
+  let toastTimer = null;
+
   // A/B Loop state
   let loopA = null;
   let loopB = null;
   let loopActive = false;
 
-  const STORAGE_KEY = 'ytb_bookmarks'; // { [videoId]: [{ time, label }] }
+  const STORAGE_KEY = 'ytb_bookmarks'; // { [videoId]: [{ time, label, color }] }
 
   // ---- Utilities ---------------------------------------------------------
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -79,32 +91,124 @@
     await saveBookmarks(videoId, bookmarks);
   }
 
+  // ---- Undo Toast Notification -------------------------------------------
+  function ensureToastContainer() {
+    if (toastEl && document.contains(toastEl)) return;
+    toastEl = document.createElement('div');
+    toastEl.className = 'ytb-toast';
+    toastEl.style.display = 'none';
+    toastEl.innerHTML = `
+      <span class="ytb-toast-msg"></span>
+      <button class="ytb-toast-undo">Undo</button>
+    `;
+    document.body.appendChild(toastEl);
+
+    toastEl.querySelector('.ytb-toast-undo').addEventListener('click', handleUndo);
+  }
+
+  function showUndoToast(msg) {
+    ensureToastContainer();
+    clearTimeout(toastTimer);
+    toastEl.querySelector('.ytb-toast-msg').textContent = msg;
+    toastEl.classList.add('show');
+    toastEl.style.display = 'flex';
+
+    toastTimer = setTimeout(() => {
+      hideUndoToast();
+    }, 5000);
+  }
+
+  function hideUndoToast() {
+    if (!toastEl) return;
+    toastEl.classList.remove('show');
+    setTimeout(() => {
+      if (toastEl && !toastEl.classList.contains('show')) {
+        toastEl.style.display = 'none';
+      }
+    }, 200);
+  }
+
+  async function handleUndo() {
+    if (!undoState) return;
+    if (undoState.type === 'single' && undoState.item) {
+      bookmarks.splice(undoState.index, 0, undoState.item);
+    } else if (undoState.type === 'bulk' && undoState.listBackup) {
+      bookmarks = [...undoState.listBackup];
+    }
+    undoState = null;
+    hideUndoToast();
+    await persistBookmarks();
+    renderTicks();
+    renderBookmarkList();
+  }
+
   // ---- Bookmark actions --------------------------------------------------
-  async function addBookmark(time, label = '') {
+  async function addBookmark(time, label = '', color = 'red') {
     if (!video || time == null || isNaN(time)) return;
-    const entry = { time: Math.round(time * 10) / 10, label: label || `Bookmark @ ${fmtTime(time)}` };
+    const roundedTime = Math.round(time * 10) / 10;
+    const entry = {
+      time: roundedTime,
+      label: label || `Bookmark @ ${fmtTime(time)}`,
+      color: color || 'red'
+    };
     bookmarks.push(entry);
     bookmarks.sort((a, b) => a.time - b.time);
     await persistBookmarks();
     renderTicks();
-    renderBookmarkList();
+
+    const addedIndex = bookmarks.findIndex(bm => bm.time === roundedTime);
+    
+    // Auto-switch to bookmarks tab and render list
+    if (panel) {
+      const bmsTab = panel.querySelector('.ytb-tab[data-tab="bookmarks"]');
+      if (bmsTab && !bmsTab.classList.contains('active')) {
+        bmsTab.click();
+      }
+    }
+    renderBookmarkList(addedIndex);
+    showUndoToast(`Bookmark added @ ${fmtTime(time)}`);
   }
 
   async function deleteBookmark(index) {
+    if (index < 0 || index >= bookmarks.length) return;
+    const item = bookmarks[index];
+    undoState = { type: 'single', item, index };
     bookmarks.splice(index, 1);
     await persistBookmarks();
     renderTicks();
     renderBookmarkList();
+    showUndoToast(`Bookmark @ ${fmtTime(item.time)} deleted`);
   }
 
-  function editBookmarkLabel(index, newLabel) {
+  async function clearAllBookmarks() {
+    if (!bookmarks.length) return;
+    if (!confirm('Clear all bookmarks for this video?')) return;
+    undoState = { type: 'bulk', listBackup: [...bookmarks] };
+    bookmarks = [];
+    await persistBookmarks();
+    renderTicks();
+    renderBookmarkList();
+    showUndoToast('All bookmarks cleared');
+  }
+
+  function setBookmarkColor(index, color) {
     if (index < 0 || index >= bookmarks.length) return;
-    const label = (newLabel || '').trim() || `Bookmark @ ${fmtTime(bookmarks[index].time)}`;
-    bookmarks[index].label = label;
+    bookmarks[index].color = color;
     persistBookmarks();
     renderBookmarkList();
     renderTicks();
   }
+
+  function editBookmarkLabel(index, newLabel, reRender = true) {
+    if (index < 0 || index >= bookmarks.length) return;
+    const label = (newLabel || '').trim() || `Bookmark @ ${fmtTime(bookmarks[index].time)}`;
+    if (bookmarks[index].label === label) return;
+    bookmarks[index].label = label;
+    persistBookmarks();
+    renderTicks();
+    if (reRender) renderBookmarkList();
+  }
+
 
   function jumpTo(time) {
     if (!video || time == null || isNaN(time)) return;
@@ -221,6 +325,9 @@
       tick.className = 'ytb-tick';
       tick.style.left = `${pct}%`;
       tick.dataset.index = String(i);
+      const colorHex = COLOR_MAP[bm.color] || COLOR_MAP.red;
+      tick.style.background = colorHex;
+      tick.style.boxShadow = `0 0 5px ${colorHex}`;
       tick.title = `${fmtTime(bm.time)} — ${bm.label}`;
 
       tick.addEventListener('mouseenter', (e) => showTooltip(e, bm));
@@ -256,7 +363,7 @@
   function showTooltip(e, bm) {
     if (!tooltipEl) return;
     tooltipEl.innerHTML =
-      `<div class="ytb-tt-time">${fmtTime(bm.time)}</div>` +
+      `<div class="ytb-tt-time" style="color:${COLOR_MAP[bm.color] || '#ff4e45'}">${fmtTime(bm.time)}</div>` +
       `<div class="ytb-tt-label">${escapeHtml(bm.label)}</div>`;
     tooltipEl.style.display = 'block';
     moveTooltip(e);
@@ -327,8 +434,9 @@
           </div>
         </div>
         <div class="ytb-bm-toolbar">
-          <button class="ytb-add">+ Bookmark current time</button>
-          <button class="ytb-export">Export to Markdown</button>
+          <button class="ytb-add">+ Add Bookmark</button>
+          <button class="ytb-clear-all" title="Clear all bookmarks for this video">Clear All</button>
+          <button class="ytb-export">Export Markdown</button>
         </div>
         <div class="ytb-bm-list"></div>
       </div>
@@ -349,6 +457,7 @@
     panel.querySelector('.ytb-add').addEventListener('click', () => {
       if (video) addBookmark(video.currentTime);
     });
+    panel.querySelector('.ytb-clear-all').addEventListener('click', clearAllBookmarks);
     panel.querySelector('.ytb-export').addEventListener('click', exportMarkdown);
 
     // Loop UI listeners
@@ -392,7 +501,7 @@
   }
 
   // ---- Bookmark list rendering ------------------------------------------
-  function renderBookmarkList() {
+  function renderBookmarkList(focusIndex = -1) {
     if (!panel) return;
     const list = panel.querySelector('.ytb-bm-list');
     if (!list) return;
@@ -401,32 +510,71 @@
       list.innerHTML = '<div class="ytb-empty">No bookmarks yet. Press <b>B</b> or click 🔖 to add one.</div>';
       return;
     }
+
+    let inputToFocus = null;
+
     bookmarks.forEach((bm, i) => {
+      const color = bm.color || 'red';
       const row = document.createElement('div');
       row.className = 'ytb-bm-row';
       row.innerHTML = `
-        <div class="ytb-bm-time">${fmtTime(bm.time)}</div>
-        <input class="ytb-bm-label" type="text" value="${escapeHtml(bm.label)}" />
+        <div class="ytb-bm-time" style="color:${COLOR_MAP[color]}">${fmtTime(bm.time)}</div>
+        <div class="ytb-bm-colors">
+          <span class="ytb-dot red ${color === 'red' ? 'active' : ''}" data-color="red" title="Red tag"></span>
+          <span class="ytb-dot green ${color === 'green' ? 'active' : ''}" data-color="green" title="Green tag"></span>
+          <span class="ytb-dot blue ${color === 'blue' ? 'active' : ''}" data-color="blue" title="Blue tag"></span>
+          <span class="ytb-dot yellow ${color === 'yellow' ? 'active' : ''}" data-color="yellow" title="Yellow tag"></span>
+        </div>
+        <input class="ytb-bm-label" type="text" value="${escapeHtml(bm.label)}" title="Click to rename" />
         <div class="ytb-bm-actions">
           <button class="ytb-bm-set-a" title="Set as Loop A">A</button>
           <button class="ytb-bm-set-b" title="Set as Loop B">B</button>
-          <button class="ytb-bm-jump" title="Jump to">▶</button>
+          <button class="ytb-bm-jump" title="Jump to moment">▶</button>
           <button class="ytb-bm-edit" title="Save label">✓</button>
-          <button class="ytb-bm-del" title="Delete">🗑</button>
+          <button class="ytb-bm-del" title="Delete bookmark">🗑</button>
         </div>
       `;
+
+      row.querySelectorAll('.ytb-dot').forEach(dot => {
+        dot.addEventListener('click', () => setBookmarkColor(i, dot.dataset.color));
+      });
       row.querySelector('.ytb-bm-set-a').addEventListener('click', () => setLoopPointA(bm.time));
       row.querySelector('.ytb-bm-set-b').addEventListener('click', () => setLoopPointB(bm.time));
       row.querySelector('.ytb-bm-jump').addEventListener('click', () => jumpTo(bm.time));
       row.querySelector('.ytb-bm-del').addEventListener('click', () => deleteBookmark(i));
+      
       const input = row.querySelector('.ytb-bm-label');
-      row.querySelector('.ytb-bm-edit').addEventListener('click', () => editBookmarkLabel(i, input.value));
+      row.querySelector('.ytb-bm-edit').addEventListener('click', () => editBookmarkLabel(i, input.value, false));
+
+      input.addEventListener('blur', () => editBookmarkLabel(i, input.value, false));
       input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { editBookmarkLabel(i, input.value); input.blur(); }
+        if (e.key === 'Enter') {
+          editBookmarkLabel(i, input.value, false);
+          input.blur();
+        }
+        if (e.key === 'Escape') {
+          input.value = bm.label;
+          input.blur();
+        }
       });
+
+      if (i === focusIndex) {
+        inputToFocus = input;
+      }
+
       list.appendChild(row);
     });
+
+    if (inputToFocus) {
+      setTimeout(() => {
+        inputToFocus.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        inputToFocus.focus();
+        inputToFocus.select();
+      }, 60);
+    }
   }
+
+
 
   function exportMarkdown() {
     if (!videoId) return;
